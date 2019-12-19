@@ -11,19 +11,19 @@ log_config = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 
 def setup_logging():
     global logger
-    logger = logging.getLogger("lamin_quant")
+    logger = logging.getLogger("colocalizer")
     logger.setLevel(logging.DEBUG)
     # create file handler which logs even debug messages
     this_dir = os.path.abspath(os.path.dirname(__file__))
     if platform.node() == "landons-laptop":
-        log_path = os.path.join(os.path.dirname(this_dir), "logs", "LaminQuant.log")
+        log_path = os.path.join(os.path.dirname(this_dir), "logs", "Colocalizer.log")
     else:
-        log_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "LaminQuant", "LaminQuant.log")
+        log_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Colocalizer", "Colocalizer.log")
     if not os.path.exists(os.path.dirname(log_path)):
         try:
             os.makedirs(os.path.dirname(log_path))
         except:
-            log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'LaminQuant.log')
+            log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Colocalizer.log')
     fh = logging.handlers.RotatingFileHandler(log_path, mode='a',
                                               maxBytes=100000, backupCount=3, encoding=None, delay=False)
     fh.setLevel(logging.DEBUG)

@@ -9,16 +9,17 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QFileDialog
-import os
 from pathlib import Path
 from image_processing import run_main
-import pandas as pd
 from setup import copy_settings_default, settings_file
 from configparser import ConfigParser
 import os
+import logging
 
+logger = logging.getLogger("colocalizer.ui")
 
 if not os.path.exists(settings_file):
+    logger.error("Settings file not found. Copying from default settings file.")
     copy_settings_default()
 
 
@@ -214,6 +215,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
 
 
     def user_get_dir(self):
+        logger.debug("Getting user directory.")
         # create folder selection dialog
         self.progressbar.setVisible(False)
         self.progressbar.setValue(0)
@@ -230,17 +232,20 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
             self.Files_List.clear()
         self.Files_List.addItems(zvi_list)
         # print([self.Files_List.item(index).text() for index in range(self.Files_List.count())])
+        logger.debug("Writing new last directory.")
         with open(settings_file, 'w') as configfile:
             config.write(configfile)
 
 
     def run_quant(self):
-        config["THRESHOLDS"]["Red"] = str(self.Red_thresh_box.value())
-        config["SIZES"]['Red'] = str(self.Red_size_box.value())
-        config["THRESHOLDS"]["Green"] = str(self.Green_thresh_box.value())
-        config["SIZES"]['Green'] = str(self.Green_size_box.value())
-        config["THRESHOLDS"]["Blue"] = str(self.Blue_thresh_box.value())
-        config["SIZES"]['Blue'] = str(self.Blue_size_box.value())
+        logger.debug("Running quantification...")
+        config["THRESHOLDS"]["red"] = str(self.Red_thresh_box.value())
+        config["SIZES"]['red'] = str(self.Red_size_box.value())
+        config["THRESHOLDS"]["green"] = str(self.Green_thresh_box.value())
+        config["SIZES"]['green'] = str(self.Green_size_box.value())
+        config["THRESHOLDS"]["blue"] = str(self.Blue_thresh_box.value())
+        config["SIZES"]['blue'] = str(self.Blue_size_box.value())
+        logger.debug("Writing new thresholds and sizes.")
         with open(settings_file, 'w') as configfile:
             config.write(configfile)
         self.statusbar.showMessage("Running...")
@@ -249,10 +254,11 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.progressbar.setMaximum(len(files))
         self.progressbar.setVisible(True)
         for iii, item in enumerate(files):
+            logger.debug(f"Running {item}...")
             this = self.Files_List.item(iii)
             this.setSelected(True)
-            self.progressbar.setValue(iii + 1)
             run_main(item, self.Red_thresh_box.value(), self.Red_size_box.value(),
                      self.Green_thresh_box.value(), self.Green_size_box.value(),
                      self.Blue_thresh_box.value(), self.Blue_size_box.value())
+            self.progressbar.setValue(iii + 1)
         self.statusbar.showMessage("Done!")

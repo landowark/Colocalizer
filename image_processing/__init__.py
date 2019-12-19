@@ -12,7 +12,7 @@ from tempfile import gettempdir
 from numba import njit
 
 
-logger = logging.getLogger("lamin_quant.image_processing")
+logger = logging.getLogger("colocalizer.image_processing")
 
 
 config = ConfigParser()
@@ -56,7 +56,7 @@ class ChannelImage(object):
             image = image - (np.mean(image) + np.std(image))
             # floor values to zero
             image[image<0] = 0
-        print(f"Constructing image for {self.channel_ID}")
+        logger.debug(f"Constructing image for {self.channel_ID}")
         image = sitk.GetImageFromArray(image)
         writer = sitk.ImageFileWriter()
         writer.SetFileName(self.image)
@@ -227,37 +227,37 @@ def get_channel_metadata(mdroot:ETree.Element, channel_number:int):
 
 
 def get_img(filename = "test_images/Image0001_deconvolution.zvi"):
-    print("Retrieving metadata...")
+    logger.debug("Retrieving metadata...")
     md = bf.get_omexml_metadata(filename)
-    print("Creating image reader...")
+    logger.debug("Creating image reader...")
     rdr = bf.ImageReader(filename)
     mdroot = ETree.fromstring(re.sub(' xmlns="[^"]+"', '', md, count=1))
     del md
     main_metadata = get_main_metadata(mdroot)
     files_3d = []
     for t in range(int(main_metadata['SizeT'])):
-        print(f"Time dimension loop {t}...")
+        logger.debug(f"Time dimension loop {t}...")
         for c in range(int(main_metadata['SizeC'])):
-            print(f"Channel dimension loop {c}...")
+            logger.debug(f"Channel dimension loop {c}...")
             image3d = np.empty([int(item) for item in
                                 [main_metadata['SizeZ'],
                                  main_metadata['SizeY'], main_metadata['SizeX']]])
             for z in range(int(main_metadata['SizeZ'])):
-                print(f"Z dimension loop...{z}")
+                logger.debug(f"Z dimension loop...{z}")
                 try:
                     image3d[z] = rdr.read(c=c, z=z, t=t, rescale=False)
                 except Exception as e:
-                    print("Error reading image: {}".format(e))
+                    logger.debug("Error reading image: {}".format(e))
             this_file = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), f"Image3D_t{t}_c{c}.npy")
             files_3d.append(this_file)
             np.save(this_file, image3d, allow_pickle=True)
             del image3d
-    print("Made it through image reading!")
+    logger.debug("Made it through image reading!")
     rdr.close()
-    print("Creating image handler...")
+    logger.debug("Creating image handler...")
     img = ImageHandler(main_metadata)
     for c in range(int(main_metadata['SizeC'])):
-        print(f"Channel loop {c}")
+        logger.debug(f"Channel loop {c}")
         chan_metadata = get_channel_metadata(mdroot, c)
         file_of_interest = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), f"Image3D_t0_c{c}.npy")
         # if statement for testing only remove for production
@@ -266,7 +266,7 @@ def get_img(filename = "test_images/Image0001_deconvolution.zvi"):
             # Skipping coords for blue during colocalization testing.
             img.add_channel_image(new_img)
         else:
-            print(f"File of interest {file_of_interest} not available")
+            logger.debug(f"File of interest {file_of_interest} not available")
             continue
     # os.remove(file_of_interest)
     # javabridge.kill_vm()
@@ -311,7 +311,7 @@ def save_image(red_channel, grn_channel, blu_channel, output_file):
     red_channel = sitk.BinaryThreshold(red_channel, lowerThreshold=1.0, insideValue=1, outsideValue=0)
     grn_channel = sitk.BinaryThreshold(grn_channel, lowerThreshold=1.0, insideValue=1, outsideValue=0)
     blu_channel = sitk.BinaryThreshold(blu_channel, lowerThreshold=1.0, insideValue=1, outsideValue=0)
-    print(red_channel.GetSize(), grn_channel.GetSize(), blu_channel.GetSize())
+    logger.debug(red_channel.GetSize(), grn_channel.GetSize(), blu_channel.GetSize())
     new_image = sitk.Cast(sitk.Compose(red_channel*255, grn_channel*255, blu_channel*255), sitk.sitkVectorFloat32)
     writer = sitk.ImageFileWriter()
     writer.SetFileName(output_file)
