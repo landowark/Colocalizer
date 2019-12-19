@@ -15,8 +15,9 @@ def setup_logging():
     logger.setLevel(logging.DEBUG)
     # create file handler which logs even debug messages
     this_dir = os.path.abspath(os.path.dirname(__file__))
+    print(this_dir)
     if platform.node() == "landons-laptop":
-        log_path = os.path.join(os.path.dirname(this_dir), "logs", "Colocalizer.log")
+        log_path = os.path.join(this_dir, "logs", "Colocalizer.log")
     else:
         log_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Colocalizer", "Colocalizer.log")
     if not os.path.exists(os.path.dirname(log_path)):

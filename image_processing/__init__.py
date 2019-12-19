@@ -248,7 +248,7 @@ def get_img(filename = "test_images/Image0001_deconvolution.zvi"):
                     image3d[z] = rdr.read(c=c, z=z, t=t, rescale=False)
                 except Exception as e:
                     logger.debug("Error reading image: {}".format(e))
-            this_file = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), f"Image3D_t{t}_c{c}.npy")
+            this_file = os.path.join(save_dir, f"Image3D_t{t}_c{c}.npy")
             files_3d.append(this_file)
             np.save(this_file, image3d, allow_pickle=True)
             del image3d
@@ -259,7 +259,7 @@ def get_img(filename = "test_images/Image0001_deconvolution.zvi"):
     for c in range(int(main_metadata['SizeC'])):
         logger.debug(f"Channel loop {c}")
         chan_metadata = get_channel_metadata(mdroot, c)
-        file_of_interest = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), f"Image3D_t0_c{c}.npy")
+        file_of_interest = os.path.join(save_dir, f"Image3D_t0_c{c}.npy")
         # if statement for testing only remove for production
         if os.path.exists(file_of_interest) and file_of_interest in files_3d:
             new_img = ChannelImage(image=np.load(file_of_interest), metadata=chan_metadata)
@@ -311,7 +311,6 @@ def save_image(red_channel, grn_channel, blu_channel, output_file):
     red_channel = sitk.BinaryThreshold(red_channel, lowerThreshold=1.0, insideValue=1, outsideValue=0)
     grn_channel = sitk.BinaryThreshold(grn_channel, lowerThreshold=1.0, insideValue=1, outsideValue=0)
     blu_channel = sitk.BinaryThreshold(blu_channel, lowerThreshold=1.0, insideValue=1, outsideValue=0)
-    logger.debug(red_channel.GetSize(), grn_channel.GetSize(), blu_channel.GetSize())
     new_image = sitk.Cast(sitk.Compose(red_channel*255, grn_channel*255, blu_channel*255), sitk.sitkVectorFloat32)
     writer = sitk.ImageFileWriter()
     writer.SetFileName(output_file)
