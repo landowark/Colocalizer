@@ -69,12 +69,15 @@ class ChannelImage(object):
         reader = sitk.ImageFileReader()
         reader.SetFileName(self.image)
         image = reader.Execute()
+        image.SetSpacing([Xspace, Yspace, Zspace])
         thresh_img = image>lower_thresh
         thresh_img = sitk.ConnectedComponent(thresh_img)
         self.labelled = sitk.RelabelComponent(thresh_img, sortByObjectSize=True, minimumObjectSize=minimum_obj_size)
         self.labelled.SetSpacing([Xspace, Yspace, Zspace])
-        self.stats = sitk.LabelShapeStatisticsImageFilter()
-        self.stats.Execute(self.labelled)
+        self.shape_stats = sitk.LabelShapeStatisticsImageFilter()
+        self.shape_stats.Execute(self.labelled)
+        self.int_stats = sitk.LabelIntensityStatisticsImageFilter()
+        self.int_stats.Execute(self.labelled, image)
 
 
     def measure_area(self, sizeX, sizeY, sizeZ):
@@ -113,7 +116,7 @@ class ImageHandler(object):
         # Compute statistics for the colocalizations. Work with a list of lists and then
         # combine into a dataframe, faster than appending to the dataframe one by one.
         self.marker_names = [self.channel_images[channel].channel_ID for channel in self.channel_images if self.channel_images[channel].channel_ID != "Blue"]
-        marker_stats_filters = [self.channel_images[marker].stats for marker in self.marker_names]
+        marker_stats_filters = [self.channel_images[marker].shape_stats for marker in self.marker_names]
         column_titles = ['colocalization size'] * 2 + [item for sublist in [[marker] * 4 for marker in self.marker_names]
                                                        for item in sublist]
         all_colocalizations_data = []
@@ -139,21 +142,32 @@ class ImageHandler(object):
                                                                                                     item in sublist]))
 
 
-    def perform_distance_measurements(self):
+    def perform_spot_measurements(self):
 
         def get_ee_distances(distance_stats_filter, map:bool=False):
             labels_ = []
             edge_distances = []
+            size_um = []
+            size_pixels = []
+
             for label in distance_stats_filter.GetLabels():
                 # Using minimum for each label gives us edge to edge distance
                 if map:
                     labels_.append(self.colocalization_map[label].__str__())
                     edge_distances.append(distance_stats_filter.GetMinimum(label))
+                    size_um.append(distance_stats_filter.GetPhysicalSize(label=label))
+                    size_pixels.append(distance_stats_filter.GetNumberOfPixels(label=label))
                 else:
                     labels_.append(label)
                     edge_distances.append(distance_stats_filter.GetMinimum(label))
+                    size_um.append(distance_stats_filter.GetPhysicalSize(label=label))
+                    size_pixels.append(distance_stats_filter.GetNumberOfPixels(label=label))
             # Construct dataframe
-            df = pd.DataFrame(list(zip(labels_, edge_distances)), columns=["Labels", 'edge edge distance to DAPI [um]'])
+            df = pd.DataFrame(list(zip(labels_, edge_distances, size_pixels, size_um)),
+                              columns=["Labels",
+                                       'edge edge distance to DAPI [um]',
+                                       "# Pixels",
+                                       "Size [um]"])
             return df
 
         def get_cc_distances(shape_stats_filter, map:bool=False):
@@ -179,6 +193,13 @@ class ImageHandler(object):
             df = pd.DataFrame(list(zip(labels, all_distances[np.arange(len(min_indexes)), min_indexes])), columns=["Labels", 'centroid centroid distance [um]'])
             return df
 
+        def get_actual_intensity_measurements(intensity_filter, map:bool=False):
+            labels, intensities = zip(*[(label, intensity_filter.GetMean(label)) for label in
+                      intensity_filter.GetLabels()])
+            df = pd.DataFrame(list(zip(labels, intensities)),
+                              columns=["Labels", 'Mean Intensity'])
+            return df
+
         distance_map_from_all_nuclei = sitk.Abs(sitk.SignedMaurerDistanceMap(self.channel_images["Blue"].labelled,
                                                                              squaredDistance=False,
                                                                              useImageSpacing=True))
@@ -186,23 +207,28 @@ class ImageHandler(object):
         for item in self.marker_names:
             int_stats_filter = sitk.LabelIntensityStatisticsImageFilter()
             int_stats_filter.Execute(self.channel_images[item].labelled, distance_map_from_all_nuclei)
+            logger.debug(f"Constucting edge to edge for {item}.")
             ee_distances = get_ee_distances(int_stats_filter)
             del int_stats_filter
-            sha_stats_filter = sitk.LabelShapeStatisticsImageFilter()
-            sha_stats_filter.Execute(self.channel_images[item].labelled)
-            cc_distances = get_cc_distances(sha_stats_filter)
-            del sha_stats_filter
-            self.dfs[item] = pd.merge(ee_distances, cc_distances, on="Labels")
-            del  ee_distances, cc_distances
+            logger.debug(f"Constucting centroid to centroid for {item}.")
+            cc_distances = get_cc_distances(self.channel_images[item].shape_stats)
+            logger.debug(f"Constucting intensities for {item}.")
+            intensities = get_actual_intensity_measurements(self.channel_images[item].int_stats, self.channel_images[item].shape_stats)
+            logger.debug(f"Creating dataframes for {item}.")
+            temp_df = pd.merge(ee_distances, cc_distances, on="Labels")
+            self.dfs[item] = pd.merge(temp_df, intensities, on="Labels")
+            del  ee_distances, cc_distances, intensities, temp_df
+            logger.debug(f"Running dataframe calculations for {item}.")
+            self.dfs[item]['Integrated Density'] = self.dfs[item]['Mean Intensity']/self.dfs[item]['# Pixels']
 
         int_stats_filter = sitk.LabelIntensityStatisticsImageFilter()
         int_stats_filter.Execute(self.colocalizations, distance_map_from_all_nuclei)
+        logger.debug(f"Constucting edge to edge for Colocalizations.")
         ee_distances = get_ee_distances(int_stats_filter, map=True)
         del int_stats_filter
-        sha_stats_filter = sitk.LabelShapeStatisticsImageFilter()
-        sha_stats_filter.Execute(self.colocalizations)
-        cc_distances = get_cc_distances(sha_stats_filter, map=True)
-        del sha_stats_filter
+        logger.debug(f"Constucting centroid to centroid for Colocalizations.")
+        cc_distances = get_cc_distances(self.coloc_stats, map=True)
+        logger.debug(f"Creating dataframes for Colocalizations.")
         self.dfs["Coloc"] = pd.merge(ee_distances, cc_distances, on="Labels")
         del ee_distances, cc_distances
 
@@ -289,19 +315,31 @@ def run_main(filename:str, red_thresh:int, red_obj_min:int, grn_thresh:int, grn_
             img.make_labelled_img(lower_thresh=blu_thresh, minimum_obj_size=blu_obj_min, Xspace=sizeX, Yspace=sizeY, Zspace=sizeZ)
     image.make_colocalization_image()
     image.perform_colocalization_measurements()
-    image.perform_distance_measurements()
+    image.perform_spot_measurements()
+    print(dir(image))
     save_file = os.path.join(os.path.dirname(filename), "output", os.path.splitext(os.path.basename(filename))[0] + ".tif")
     if not os.path.exists(os.path.dirname(save_file)):
         os.makedirs(os.path.dirname(save_file))
+    logger.debug(f"Attempting to save markers tif for {filename}")
     writer = pd.ExcelWriter(os.path.join(os.path.dirname(save_file), f'{os.path.splitext(os.path.basename(filename))[0]}.xlsx'), engine='xlsxwriter')
     # Write each dataframe to a different worksheet.
+    logger.debug(f"Attempting to save dataframes to excel for {filename}")
     image.colocalization_information_df.to_excel(writer, sheet_name='Colocalization Info')
     image.dfs["Coloc"].to_excel(writer, sheet_name='Colocalization distances')
     image.dfs["Red"].to_excel(writer, sheet_name='Red distances')
     image.dfs["Green"].to_excel(writer, sheet_name='Green distances')
     # Close the Pandas Excel writer and output the Excel file.
     writer.save()
-    save_image(image.channel_images['Red'].labelled, image.channel_images['Green'].labelled, image.channel_images['Blue'].labelled, save_file)
+    del writer, image.dfs
+    logger.debug("Attempting to ditch imagehandler to save memory in preparation for save.")
+    img_red = image.channel_images["Red"].labelled
+    del image.channel_images['Red']
+    img_grn = image.channel_images["Green"].labelled
+    del image.channel_images['Green']
+    img_blu = image.channel_images["Blue"].labelled
+    del image
+    logger.debug(f"Attempting to save markers tif for {filename}")
+    save_image(img_red, img_grn, img_blu, save_file)
 
 
 
