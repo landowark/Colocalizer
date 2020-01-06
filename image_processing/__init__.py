@@ -314,7 +314,6 @@ def run_main(filename:str, red_thresh:int, red_obj_min:int, grn_thresh:int, grn_
     image.make_colocalization_image()
     image.perform_colocalization_measurements()
     image.perform_spot_measurements()
-    print(dir(image))
     save_file = os.path.join(os.path.dirname(filename), "output", os.path.splitext(os.path.basename(filename))[0] + ".tif")
     if not os.path.exists(os.path.dirname(save_file)):
         os.makedirs(os.path.dirname(save_file))
