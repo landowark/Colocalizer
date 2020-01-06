@@ -294,8 +294,6 @@ def get_img(filename = "test_images/Image0001_deconvolution.zvi"):
         else:
             logger.debug(f"File of interest {file_of_interest} not available")
             continue
-    # os.remove(file_of_interest)
-    # javabridge.kill_vm()
     return img
 
 
@@ -344,13 +342,10 @@ def run_main(filename:str, red_thresh:int, red_obj_min:int, grn_thresh:int, grn_
 
 
 def save_image(red_channel, grn_channel, blu_channel, output_file):
-    output_dir = os.path.dirname(output_file)
-    # red_channel = sitk.LabelMapToBinary(sitk.Image(grn_channel.GetSize(), sitk.sitkLabelUInt8))
     red_channel = sitk.BinaryThreshold(red_channel, lowerThreshold=1.0, insideValue=1, outsideValue=0)
     grn_channel = sitk.BinaryThreshold(grn_channel, lowerThreshold=1.0, insideValue=1, outsideValue=0)
     blu_channel = sitk.BinaryThreshold(blu_channel, lowerThreshold=1.0, insideValue=1, outsideValue=0)
     new_image = sitk.Cast(sitk.Compose(red_channel*255, grn_channel*255, blu_channel*255), sitk.sitkVectorFloat32)
     writer = sitk.ImageFileWriter()
     writer.SetFileName(output_file)
-
     writer.Execute(new_image)
