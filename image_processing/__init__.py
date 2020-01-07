@@ -1,5 +1,6 @@
 import bioformats as bf
-from xml.etree import ElementTree as ETree
+# from xml.etree import ElementTree as ETree
+from lxml import etree
 import numpy as np
 import os
 from setup import copy_settings_default, settings_file
@@ -10,6 +11,7 @@ import re
 import logging
 from tempfile import gettempdir
 from numba import njit
+import czifile as czi
 
 
 logger = logging.getLogger("colocalizer.image_processing")
@@ -61,7 +63,7 @@ class ChannelImage(object):
         writer = sitk.ImageFileWriter()
         writer.SetFileName(self.image)
         writer.Execute(image)
-        del self.metadata['ID']
+
         del self.metadata['Color']
 
 
@@ -233,59 +235,138 @@ class ImageHandler(object):
         del ee_distances, cc_distances
 
 
+def elem2dict(node):
+    """
+    Convert an lxml.etree node tree into a dict.
+    """
+    result = {}
+
+    for element in node.iterchildren():
+        # Remove namespace prefix
+        key = element.tag.split('}')[1] if '}' in element.tag else element.tag
+
+        # Process element as tree element if the inner XML contains non-whitespace content
+        if element.text and element.text.strip():
+            value = element.text
+        else:
+            value = elem2dict(element)
+        if key in result:
+
+            if type(result[key]) is list:
+                result[key].append(value)
+            else:
+                tempvalue = result[key].copy()
+                result[key] = [tempvalue, value]
+        else:
+            result[key] = value
+    return result
+
+
+# def get_main_metadata(mdroot) -> dict:
+#     objective = dict(mdroot.find("Instrument").find('Objective').items())
+#     del objective['ID']
+#     pixels = dict(mdroot.find("Image").find("Pixels").items())
+#     del pixels['ID']
+#     return dict(**pixels, **objective)
+
+
 def get_main_metadata(mdroot) -> dict:
-    objective = dict(mdroot.find("Instrument").find('Objective').items())
-    del objective['ID']
-    pixels = dict(mdroot.find("Image").find("Pixels").items())
-    del pixels['ID']
-    return dict(**pixels, **objective)
+    ac = elem2dict([item for item in mdroot.iter("AcquisitionModeSetup")][0])
+    objective = elem2dict([obj for obj in [item for item in mdroot.iter("Instrument")][0].iter("Objective")][0])
+    pixels = elem2dict([item for item in mdroot.iter("Image")][0])
+    return dict(**ac, **pixels, **objective)
 
 
-def get_channel_metadata(mdroot:ETree.Element, channel_number:int):
-    channels = mdroot.find('Image').find('Pixels').findall('Channel')
-    for channel in channels:
-        channel_dict = dict(channel.items())
-        if channel_dict['ID'].endswith(str(channel_number)):
-            # Set channel color based on color map.
-            channel_dict["Color"] = [color for color in color_map if channel_dict['Name'].lower() in color_map[color]][0].title()
-            return channel_dict
-    return None
+# def get_channel_metadata(mdroot:etree._Element, channel_number:int):
+#     channels = mdroot.find('Image').find('Pixels').findall('Channel')
+#     for channel in channels:
+#         channel_dict = dict(channel.items())
+#         if channel_dict['ID'].endswith(str(channel_number)):
+#             # Set channel color based on color map.
+#             channel_dict["Color"] = [color for color in color_map if channel_dict['Name'].lower() in color_map[color]][0].title()
+#             return channel_dict
+#     return None
 
 
-def get_img(filename = "test_images/Image0001_deconvolution.zvi"):
+def get_channel_metadata(mdroot:etree._Element, channel_number:int):
+    channel = [obj for obj in [item for item in mdroot.iter("Channels")][0].iter("Channel")][channel_number]
+    channel_dict = elem2dict(channel)
+    # Set channel color based on color map.
+    channel_dict["Color"] = [color for color in color_map if channel.get('Name').lower() in color_map[color]][0].title()
+    return channel_dict
+
+
+# def get_img(filename = "test_images/Image0001_deconvolution.zvi"):
+#     logger.debug("Retrieving metadata...")
+#     md = bf.get_omexml_metadata(filename)
+#     logger.debug("Creating image reader...")
+#     rdr = bf.ImageReader(filename)
+#     mdroot = ETree.fromstring(re.sub(' xmlns="[^"]+"', '', md, count=1))
+#     del md
+#     main_metadata = get_main_metadata(mdroot)
+#     files_3d = []
+#     for t in range(int(main_metadata['SizeT'])):
+#         logger.debug(f"Time dimension loop {t}...")
+#         for c in range(int(main_metadata['SizeC'])):
+#             logger.debug(f"Channel dimension loop {c}...")
+#             image3d = np.empty([int(item) for item in
+#                                 [main_metadata['SizeZ'],
+#                                  main_metadata['SizeY'], main_metadata['SizeX']]])
+#             for z in range(int(main_metadata['SizeZ'])):
+#                 logger.debug(f"Z dimension loop...{z}")
+#                 try:
+#                     image3d[z] = rdr.read(c=c, z=z, t=t, rescale=False)
+#                 except Exception as e:
+#                     logger.debug("Error reading image: {}".format(e))
+#             this_file = os.path.join(save_dir, f"Image3D_t{t}_c{c}.npy")
+#             files_3d.append(this_file)
+#             np.save(this_file, image3d, allow_pickle=True)
+#             del image3d
+#     logger.debug("Made it through image reading!")
+#     rdr.close()
+#     logger.debug("Creating image handler...")
+#     img = ImageHandler(main_metadata)
+#     for c in range(int(main_metadata['SizeC'])):
+#         logger.debug(f"Channel loop {c}")
+#         chan_metadata = get_channel_metadata(mdroot, c)
+#         file_of_interest = os.path.join(save_dir, f"Image3D_t0_c{c}.npy")
+#         # if statement for testing only remove for production
+#         if os.path.exists(file_of_interest) and file_of_interest in files_3d:
+#             new_img = ChannelImage(image=np.load(file_of_interest), metadata=chan_metadata)
+#             # Skipping coords for blue during colocalization testing.
+#             img.add_channel_image(new_img)
+#         else:
+#             logger.debug(f"File of interest {file_of_interest} not available")
+#             continue
+#     return img
+
+def get_img(filename):
+    logger.debug(f"Using czifile to open {filename}")
+    czifile = czi.CziFile(filename)
     logger.debug("Retrieving metadata...")
-    md = bf.get_omexml_metadata(filename)
-    logger.debug("Creating image reader...")
-    rdr = bf.ImageReader(filename)
-    mdroot = ETree.fromstring(re.sub(' xmlns="[^"]+"', '', md, count=1))
+    md = czifile.metadata()
+    parser = etree.XMLParser(remove_blank_text=True)
+    mdroot = etree.XML(md, parser=parser)
     del md
     main_metadata = get_main_metadata(mdroot)
+    channels = [obj for obj in [item for item in mdroot.iter("Dimensions")][0].iter("Channels")][0]
+    del mdroot
+    image = czifile.asarray().squeeze()
     files_3d = []
-    for t in range(int(main_metadata['SizeT'])):
-        logger.debug(f"Time dimension loop {t}...")
-        for c in range(int(main_metadata['SizeC'])):
-            logger.debug(f"Channel dimension loop {c}...")
-            image3d = np.empty([int(item) for item in
-                                [main_metadata['SizeZ'],
-                                 main_metadata['SizeY'], main_metadata['SizeX']]])
-            for z in range(int(main_metadata['SizeZ'])):
-                logger.debug(f"Z dimension loop...{z}")
-                try:
-                    image3d[z] = rdr.read(c=c, z=z, t=t, rescale=False)
-                except Exception as e:
-                    logger.debug("Error reading image: {}".format(e))
-            this_file = os.path.join(save_dir, f"Image3D_t{t}_c{c}.npy")
-            files_3d.append(this_file)
-            np.save(this_file, image3d, allow_pickle=True)
-            del image3d
+    for c in range(int(main_metadata['SizeC'])):
+        logger.debug(f"Channel dimension loop {c}...")
+        image3d = image[c]
+        this_file = os.path.join(save_dir, f"Image3D_c{c}.npy")
+        files_3d.append(this_file)
+        np.save(this_file, image3d, allow_pickle=True)
+        del image3d
     logger.debug("Made it through image reading!")
-    rdr.close()
     logger.debug("Creating image handler...")
     img = ImageHandler(main_metadata)
     for c in range(int(main_metadata['SizeC'])):
         logger.debug(f"Channel loop {c}")
-        chan_metadata = get_channel_metadata(mdroot, c)
-        file_of_interest = os.path.join(save_dir, f"Image3D_t0_c{c}.npy")
+        chan_metadata = get_channel_metadata(channels, c)
+        file_of_interest = os.path.join(save_dir, f"Image3D_c{c}.npy")
         # if statement for testing only remove for production
         if os.path.exists(file_of_interest) and file_of_interest in files_3d:
             new_img = ChannelImage(image=np.load(file_of_interest), metadata=chan_metadata)
@@ -296,12 +377,11 @@ def get_img(filename = "test_images/Image0001_deconvolution.zvi"):
             continue
     return img
 
-
 def run_main(filename:str, red_thresh:int, red_obj_min:int, grn_thresh:int, grn_obj_min:int, blu_thresh:int, blu_obj_min:int):
     image = get_img(filename)
-    sizeX = float(image.metadata['PhysicalSizeX'])
-    sizeY = float(image.metadata['PhysicalSizeY'])
-    sizeZ = float(image.metadata['PhysicalSizeZ'])
+    sizeX = float(image.metadata['ScalingX'])
+    sizeY = float(image.metadata['ScalingY'])
+    sizeZ = float(image.metadata['ScalingZ'])
     for key in image.channel_images:
         img = image.channel_images[key]
         # img.make_otsu_img()
