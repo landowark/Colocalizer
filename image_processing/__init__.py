@@ -224,7 +224,7 @@ class ImageHandler(object):
             self.dfs[item] = pd.merge(temp_df, intensities, on="Labels")
             del  ee_distances, cc_distances, intensities, temp_df
             logger.debug(f"Running dataframe calculations for {item}.")
-            self.dfs[item]['Integrated Density'] = self.dfs[item]['Mean Intensity']/self.dfs[item]['# Voxels']
+            self.dfs[item]['Integrated Density'] = self.dfs[item]['Mean Intensity']*self.dfs[item]['# Voxels']
 
         int_stats_filter = sitk.LabelIntensityStatisticsImageFilter()
         int_stats_filter.Execute(self.colocalizations, distance_map_from_all_nuclei)
