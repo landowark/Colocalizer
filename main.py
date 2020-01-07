@@ -1,9 +1,9 @@
 import logging.handlers
 from ui import Ui_MainWindow
 from PyQt5 import QtWidgets
-import javabridge
+# import javabridge
 import os
-import bioformats as bf
+# import bioformats as bf
 import logging
 import platform
 
@@ -49,19 +49,19 @@ def setup_logging():
 if __name__ == "__main__":
     import sys
     setup_logging()
-    javabridge.start_vm(
-        args=[
-            "-Dlog4j.configuration=file:{}".format(log_config),
-        ],
-        class_path=bf.JARS,
-        run_headless=True
-    )
-    try:
-        app = QtWidgets.QApplication(sys.argv)
-        MainWindow = QtWidgets.QMainWindow()
-        ui = Ui_MainWindow()
-        ui.setupUi(MainWindow)
-        MainWindow.show()
-        sys.exit(app.exec_())
-    finally:
-        javabridge.kill_vm()
+    # javabridge.start_vm(
+    #     args=[
+    #         "-Dlog4j.configuration=file:{}".format(log_config),
+    #     ],
+    #     class_path=bf.JARS,
+    #     run_headless=True
+    # )
+    # try:
+    app = QtWidgets.QApplication(sys.argv)
+    MainWindow = QtWidgets.QMainWindow()
+    ui = Ui_MainWindow()
+    ui.setupUi(MainWindow)
+    MainWindow.show()
+    sys.exit(app.exec_())
+    # finally:
+    #     javabridge.kill_vm()

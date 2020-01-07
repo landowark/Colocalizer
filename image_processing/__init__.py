@@ -7,7 +7,7 @@ from setup import copy_settings_default, settings_file
 from configparser import ConfigParser
 import SimpleITK as sitk
 import pandas as pd
-import re
+# import re
 import logging
 from tempfile import gettempdir
 from numba import njit
@@ -51,6 +51,7 @@ class ChannelImage(object):
     def __init__(self, image:np.ndarray, metadata:dict):
         self.metadata = metadata
         self.channel_ID = metadata['Color']
+
         del metadata
         self.image = os.path.join(save_dir, self.channel_ID + ".nrrd")
         if self.channel_ID == "Blue":
@@ -91,6 +92,9 @@ class ChannelImage(object):
 class ImageHandler(object):
     def __init__(self, metadata:dict):
         self.metadata = metadata
+        self.metadata["ScalingX"] = float(self.metadata["ScalingX"]) * 1e+6
+        self.metadata["ScalingY"] = float(self.metadata["ScalingY"]) * 1e+6
+        self.metadata["ScalingZ"] = float(self.metadata["ScalingZ"]) * 1e+6
         self.channel_images = {}
 
     def add_channel_image(self, channel_image):
@@ -102,7 +106,9 @@ class ImageHandler(object):
         filt = sitk.AndImageFilter()
         colocalizations = filt.Execute(red, grn)
         self.colocalizations = sitk.ConnectedComponent(colocalizations)
-        self.colocalizations.SetSpacing([float(self.metadata["PhysicalSizeX"]),float(self.metadata["PhysicalSizeY"]),float(self.metadata["PhysicalSizeZ"])])
+        self.colocalizations.SetSpacing([float(self.metadata["ScalingX"]),
+                                         float(self.metadata["ScalingY"]),
+                                         float(self.metadata["ScalingZ"])])
         self.coloc_stats = sitk.LabelShapeStatisticsImageFilter()
         self.coloc_stats.Execute(self.colocalizations)
         self.colocalization_map = {}
@@ -168,7 +174,7 @@ class ImageHandler(object):
             df = pd.DataFrame(list(zip(labels_, edge_distances, size_pixels, size_um)),
                               columns=["Labels",
                                        'edge edge distance to DAPI [um]',
-                                       "# Pixels",
+                                       "# Voxels",
                                        "Size [um]"])
             return df
 
@@ -221,7 +227,7 @@ class ImageHandler(object):
             self.dfs[item] = pd.merge(temp_df, intensities, on="Labels")
             del  ee_distances, cc_distances, intensities, temp_df
             logger.debug(f"Running dataframe calculations for {item}.")
-            self.dfs[item]['Integrated Density'] = self.dfs[item]['Mean Intensity']/self.dfs[item]['# Pixels']
+            self.dfs[item]['Integrated Density'] = self.dfs[item]['Mean Intensity']/self.dfs[item]['# Voxels']
 
         int_stats_filter = sitk.LabelIntensityStatisticsImageFilter()
         int_stats_filter.Execute(self.colocalizations, distance_map_from_all_nuclei)
@@ -352,6 +358,7 @@ def get_img(filename):
     channels = [obj for obj in [item for item in mdroot.iter("Dimensions")][0].iter("Channels")][0]
     del mdroot
     image = czifile.asarray().squeeze()
+    del czifile
     files_3d = []
     for c in range(int(main_metadata['SizeC'])):
         logger.debug(f"Channel dimension loop {c}...")
