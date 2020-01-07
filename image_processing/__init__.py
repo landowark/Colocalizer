@@ -1,5 +1,3 @@
-import bioformats as bf
-# from xml.etree import ElementTree as ETree
 from lxml import etree
 import numpy as np
 import os
@@ -7,7 +5,6 @@ from setup import copy_settings_default, settings_file
 from configparser import ConfigParser
 import SimpleITK as sitk
 import pandas as pd
-# import re
 import logging
 from tempfile import gettempdir
 from numba import njit
@@ -268,30 +265,12 @@ def elem2dict(node):
     return result
 
 
-# def get_main_metadata(mdroot) -> dict:
-#     objective = dict(mdroot.find("Instrument").find('Objective').items())
-#     del objective['ID']
-#     pixels = dict(mdroot.find("Image").find("Pixels").items())
-#     del pixels['ID']
-#     return dict(**pixels, **objective)
-
-
 def get_main_metadata(mdroot) -> dict:
     ac = elem2dict([item for item in mdroot.iter("AcquisitionModeSetup")][0])
     objective = elem2dict([obj for obj in [item for item in mdroot.iter("Instrument")][0].iter("Objective")][0])
     pixels = elem2dict([item for item in mdroot.iter("Image")][0])
     return dict(**ac, **pixels, **objective)
 
-
-# def get_channel_metadata(mdroot:etree._Element, channel_number:int):
-#     channels = mdroot.find('Image').find('Pixels').findall('Channel')
-#     for channel in channels:
-#         channel_dict = dict(channel.items())
-#         if channel_dict['ID'].endswith(str(channel_number)):
-#             # Set channel color based on color map.
-#             channel_dict["Color"] = [color for color in color_map if channel_dict['Name'].lower() in color_map[color]][0].title()
-#             return channel_dict
-#     return None
 
 
 def get_channel_metadata(mdroot:etree._Element, channel_number:int):
@@ -301,50 +280,6 @@ def get_channel_metadata(mdroot:etree._Element, channel_number:int):
     channel_dict["Color"] = [color for color in color_map if channel.get('Name').lower() in color_map[color]][0].title()
     return channel_dict
 
-
-# def get_img(filename = "test_images/Image0001_deconvolution.zvi"):
-#     logger.debug("Retrieving metadata...")
-#     md = bf.get_omexml_metadata(filename)
-#     logger.debug("Creating image reader...")
-#     rdr = bf.ImageReader(filename)
-#     mdroot = ETree.fromstring(re.sub(' xmlns="[^"]+"', '', md, count=1))
-#     del md
-#     main_metadata = get_main_metadata(mdroot)
-#     files_3d = []
-#     for t in range(int(main_metadata['SizeT'])):
-#         logger.debug(f"Time dimension loop {t}...")
-#         for c in range(int(main_metadata['SizeC'])):
-#             logger.debug(f"Channel dimension loop {c}...")
-#             image3d = np.empty([int(item) for item in
-#                                 [main_metadata['SizeZ'],
-#                                  main_metadata['SizeY'], main_metadata['SizeX']]])
-#             for z in range(int(main_metadata['SizeZ'])):
-#                 logger.debug(f"Z dimension loop...{z}")
-#                 try:
-#                     image3d[z] = rdr.read(c=c, z=z, t=t, rescale=False)
-#                 except Exception as e:
-#                     logger.debug("Error reading image: {}".format(e))
-#             this_file = os.path.join(save_dir, f"Image3D_t{t}_c{c}.npy")
-#             files_3d.append(this_file)
-#             np.save(this_file, image3d, allow_pickle=True)
-#             del image3d
-#     logger.debug("Made it through image reading!")
-#     rdr.close()
-#     logger.debug("Creating image handler...")
-#     img = ImageHandler(main_metadata)
-#     for c in range(int(main_metadata['SizeC'])):
-#         logger.debug(f"Channel loop {c}")
-#         chan_metadata = get_channel_metadata(mdroot, c)
-#         file_of_interest = os.path.join(save_dir, f"Image3D_t0_c{c}.npy")
-#         # if statement for testing only remove for production
-#         if os.path.exists(file_of_interest) and file_of_interest in files_3d:
-#             new_img = ChannelImage(image=np.load(file_of_interest), metadata=chan_metadata)
-#             # Skipping coords for blue during colocalization testing.
-#             img.add_channel_image(new_img)
-#         else:
-#             logger.debug(f"File of interest {file_of_interest} not available")
-#             continue
-#     return img
 
 def get_img(filename):
     logger.debug(f"Using czifile to open {filename}")
