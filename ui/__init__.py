@@ -47,7 +47,7 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
         self.centralwidget.setMaximumSize(QtCore.QSize(16777215, 16777215))
         self.centralwidget.setObjectName("centralwidget")
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap(":/img/favicon.ico"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(QtGui.QPixmap(os.path.join(os.path.dirname(os.path.abspath(__file__)), "img","favicon.ico")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         MainWindow.setWindowIcon(icon)
         self.gridLayout = QtWidgets.QGridLayout(self.centralwidget)
         self.gridLayout.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
