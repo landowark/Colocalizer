@@ -1,9 +1,7 @@
 import logging.handlers
 from ui import Ui_MainWindow
 from PyQt5 import QtWidgets
-# import javabridge
 import os
-# import bioformats as bf
 import logging
 import platform
 
@@ -15,7 +13,6 @@ def setup_logging():
     logger.setLevel(logging.DEBUG)
     # create file handler which logs even debug messages
     this_dir = os.path.abspath(os.path.dirname(__file__))
-    print(this_dir)
     if platform.node() == "landons-laptop":
         log_path = os.path.join(this_dir, "logs", "Colocalizer.log")
     else:
@@ -49,19 +46,9 @@ def setup_logging():
 if __name__ == "__main__":
     import sys
     setup_logging()
-    # javabridge.start_vm(
-    #     args=[
-    #         "-Dlog4j.configuration=file:{}".format(log_config),
-    #     ],
-    #     class_path=bf.JARS,
-    #     run_headless=True
-    # )
-    # try:
     app = QtWidgets.QApplication(sys.argv)
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(MainWindow)
     MainWindow.show()
     sys.exit(app.exec_())
-    # finally:
-    #     javabridge.kill_vm()
