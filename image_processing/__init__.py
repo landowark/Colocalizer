@@ -227,25 +227,19 @@ class ImageHandler(object):
             del  ee_distances, cc_distances, intensities, temp_df
             logger.debug(f"Running dataframe calculations for {item}.")
             self.dfs[item]['Integrated Density'] = self.dfs[item]['Mean Intensity']*self.dfs[item]['# Voxels']
-
         int_stats_filter = sitk.LabelIntensityStatisticsImageFilter()
         int_stats_filter.Execute(self.colocalizations, distance_map_from_all_nuclei)
         logger.debug(f"Constucting edge to edge for Colocalizations.")
         ee_distances = get_ee_distances(int_stats_filter, map=True).reset_index()
-        print(ee_distances)
         del int_stats_filter
         logger.debug(f"Constucting centroid to centroid for Colocalizations.")
         cc_distances = get_cc_distances(self.coloc_stats, map=True).reset_index()
-        print(cc_distances)
         logger.debug(f"Creating dataframes for Colocalizations.")
-
         df = pd.merge(ee_distances, cc_distances, on="Labels")
         self.dfs["Coloc"] = pd.DataFrame(df[df.index_x == df.index_y], columns=["Labels","edge edge distance to DAPI [um]",
                                                                                 "# Voxels",
                                                                                 "Size [um]",
                                                                                 "centroid centroid distance [um]"]).reset_index(drop=True)
-        print(self.dfs['Coloc'])
-
         del ee_distances, cc_distances
 
 
