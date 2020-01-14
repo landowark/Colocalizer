@@ -101,7 +101,9 @@ class ImageHandler(object):
         red = self.channel_images['Red'].labelled
         grn = self.channel_images['Green'].labelled
         filt = sitk.AndImageFilter()
-        colocalizations = filt.Execute(red, grn)
+        # colocalizations = filt.Execute(red, grn)
+        # self.colocalizations = filt.Execute(red, grn)
+        colocalizations = red * grn
         self.colocalizations = sitk.ConnectedComponent(colocalizations)
         self.colocalizations.SetSpacing([float(self.metadata["ScalingX"]),
                                          float(self.metadata["ScalingY"]),
@@ -229,12 +231,21 @@ class ImageHandler(object):
         int_stats_filter = sitk.LabelIntensityStatisticsImageFilter()
         int_stats_filter.Execute(self.colocalizations, distance_map_from_all_nuclei)
         logger.debug(f"Constucting edge to edge for Colocalizations.")
-        ee_distances = get_ee_distances(int_stats_filter, map=True)
+        ee_distances = get_ee_distances(int_stats_filter, map=True).reset_index()
+        print(ee_distances)
         del int_stats_filter
         logger.debug(f"Constucting centroid to centroid for Colocalizations.")
-        cc_distances = get_cc_distances(self.coloc_stats, map=True)
+        cc_distances = get_cc_distances(self.coloc_stats, map=True).reset_index()
+        print(cc_distances)
         logger.debug(f"Creating dataframes for Colocalizations.")
-        self.dfs["Coloc"] = pd.merge(ee_distances, cc_distances, on="Labels")
+
+        df = pd.merge(ee_distances, cc_distances, on="Labels")
+        self.dfs["Coloc"] = pd.DataFrame(df[df.index_x == df.index_y], columns=["Labels","edge edge distance to DAPI [um]",
+                                                                                "# Voxels",
+                                                                                "Size [um]",
+                                                                                "centroid centroid distance [um]"]).reset_index(drop=True)
+        print(self.dfs['Coloc'])
+
         del ee_distances, cc_distances
 
 
@@ -319,6 +330,7 @@ def get_img(filename):
             continue
     return img
 
+
 def run_main(filename:str, red_thresh:int, red_obj_min:int, grn_thresh:int, grn_obj_min:int, blu_thresh:int, blu_obj_min:int):
     image = get_img(filename)
     sizeX = float(image.metadata['ScalingX'])
@@ -336,7 +348,7 @@ def run_main(filename:str, red_thresh:int, red_obj_min:int, grn_thresh:int, grn_
     image.make_colocalization_image()
     image.perform_colocalization_measurements()
     image.perform_spot_measurements()
-    save_file = os.path.join(os.path.dirname(filename), "output", os.path.splitext(os.path.basename(filename))[0] + ".tif")
+    save_file = os.path.join(os.path.dirname(filename), f"{os.path.dirname(filename)}_output", os.path.splitext(os.path.basename(filename))[0] + ".tif")
     if not os.path.exists(os.path.dirname(save_file)):
         os.makedirs(os.path.dirname(save_file))
     logger.debug(f"Attempting to save markers tif for {filename}")
@@ -359,7 +371,6 @@ def run_main(filename:str, red_thresh:int, red_obj_min:int, grn_thresh:int, grn_
     del image
     logger.debug(f"Attempting to save markers tif for {filename}")
     save_image(img_red, img_grn, img_blu, save_file)
-
 
 
 def save_image(red_channel, grn_channel, blu_channel, output_file):
