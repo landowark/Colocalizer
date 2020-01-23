@@ -1,7 +1,7 @@
 from lxml import etree
 import numpy as np
 import os
-from setup import copy_settings_default, settings_file
+from setup import copy_settings_default, settings_file, get_processor_name
 from configparser import ConfigParser
 import SimpleITK as sitk
 import pandas as pd
@@ -9,6 +9,7 @@ import logging
 from tempfile import gettempdir
 from numba import njit
 import czifile as czi
+from build.first import cython_first_index
 
 
 logger = logging.getLogger("colocalizer.image_processing")
@@ -31,6 +32,8 @@ save_dir = gettempdir()
     # os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 
+
+
 @njit
 def first_index(arr, val):
     '''
@@ -41,6 +44,8 @@ def first_index(arr, val):
     for index, value in np.ndenumerate(arr):
         if val == value:
              return index
+
+
 
 
 
@@ -97,7 +102,7 @@ class ImageHandler(object):
     def add_channel_image(self, channel_image):
         self.channel_images[channel_image.channel_ID] = channel_image
 
-    def make_colocalization_image(self):
+    def make_colocalization_image(self, index_func):
         red = self.channel_images['Red'].labelled
         grn = self.channel_images['Green'].labelled
         filt = sitk.AndImageFilter()
@@ -114,7 +119,7 @@ class ImageHandler(object):
         colocolization_labeled_segmentation_arr_view = sitk.GetArrayViewFromImage(self.colocalizations)
         for label in self.coloc_stats.GetLabels():
             # The index into the numpy array needs to be flipped as the order in numpy is zyx and in SimpleITK xyz
-            index = first_index(colocolization_labeled_segmentation_arr_view, label)[::-1]
+            index = index_func(colocolization_labeled_segmentation_arr_view, label)[::-1]
             self.colocalization_map[label] = [labeled_seg[index] for labeled_seg in
                                                           [self.channel_images["Green"].labelled,
                                                            self.channel_images["Red"].labelled]]
@@ -236,6 +241,7 @@ class ImageHandler(object):
         cc_distances = get_cc_distances(self.coloc_stats, map=True).reset_index()
         logger.debug(f"Creating dataframes for Colocalizations.")
         df = pd.merge(ee_distances, cc_distances, on="Labels")
+
         self.dfs["Coloc"] = pd.DataFrame(df[df.index_x == df.index_y], columns=["Labels","edge edge distance to DAPI [um]",
                                                                                 "# Voxels",
                                                                                 "Size [um]",
@@ -326,6 +332,13 @@ def get_img(filename):
 
 
 def run_main(filename:str, red_thresh:int, red_obj_min:int, grn_thresh:int, grn_obj_min:int, blu_thresh:int, blu_obj_min:int):
+    processor = get_processor_name()
+    if "Intel" in processor:
+        logger.debug("Detected Intel processor. Using numba method to find indices.")
+        index_func = first_index
+    else:
+        logger.debug("Detected non-Intel processor. Falling back to cython to find indices.")
+        index_func = cython_first_index
     image = get_img(filename)
     sizeX = float(image.metadata['ScalingX'])
     sizeY = float(image.metadata['ScalingY'])
@@ -339,7 +352,7 @@ def run_main(filename:str, red_thresh:int, red_obj_min:int, grn_thresh:int, grn_
             img.make_labelled_img(lower_thresh=grn_thresh, minimum_obj_size=grn_obj_min, Xspace=sizeX, Yspace=sizeY, Zspace=sizeZ)
         if img.channel_ID == "Blue":
             img.make_labelled_img(lower_thresh=blu_thresh, minimum_obj_size=blu_obj_min, Xspace=sizeX, Yspace=sizeY, Zspace=sizeZ)
-    image.make_colocalization_image()
+    image.make_colocalization_image(index_func=index_func)
     image.perform_colocalization_measurements()
     image.perform_spot_measurements()
     save_file = os.path.join(os.path.dirname(filename), f"{os.path.dirname(filename)}_output", os.path.splitext(os.path.basename(filename))[0] + ".tif")
