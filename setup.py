@@ -1,5 +1,6 @@
 from setuptools import setup, find_packages, Extension
 from Cython.Distutils import build_ext
+import numpy
 
 ext_modules=[
     Extension("build.first",    # location of the resulting .so
