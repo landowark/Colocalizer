@@ -3,7 +3,8 @@ from Cython.Distutils import build_ext
 
 ext_modules=[
     Extension("build.first",    # location of the resulting .so
-             ["src/first.pyx"],) ]
+             ["src/first.pyx"], include_dirs=[numpy.get_include()]),
+]
 
 
 setup(name='package',
