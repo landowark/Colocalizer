@@ -6,7 +6,7 @@ future==0.18.2
 imagecodecs-lite==2019.12.3
 jmespath==0.9.4
 llvmlite==0.30.0
-lxml==4.4.2
+lxml==4.6.2
 numba==0.46.0
 numpy==1.17.4
 pandas==0.25.3
